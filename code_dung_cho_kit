@@ -1,0 +1,138 @@
+#include <stdio.h>
+
+//-----------------------------------------
+#define RST_PIN 13
+#define SS_PIN 12
+//-----------------------------------------
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+MFRC522::MIFARE_Key key;        
+//-----------------------------------------
+/* Đặt số block để ghi dữ liệu */
+int blockNum = 2;  
+/* Đây là dữ liệu thực tế sẽ được ghi vào thẻ */
+byte blockData[16] = {'m', 'a', 'n', 'i'};
+//-----------------------------------------
+/* Tạo mảng để đọc dữ liệu từ Block */
+/* Độ dài của bộ đệm nên là 2 byte nhiều hơn kích thước của Block (16 byte) */
+byte bufferLen = 18;
+byte readBlockData[18];
+//-----------------------------------------
+MFRC522::StatusCode status;
+//-----------------------------------------
+
+void setup() 
+{
+  //-----------------------------------------
+  // Khởi tạo Module MFRC522
+  mfrc522.PCD_Init();
+  printf("Quét thẻ MIFARE 1K để ghi dữ liệu...\n");
+  //-----------------------------------------
+}
+
+/****************************************************************************************************
+ * Hàm WriteDataToBlock()
+ ****************************************************************************************************/
+void loop()
+{
+  //------------------------------------------------------------------------------
+  /* Chuẩn bị key để xác thực */
+  /* Tất cả các key đều được thiết lập thành FFFFFFFFFFFFh khi được giao từ nhà máy */
+  for (byte i = 0; i < 6; i++){
+    key.keyByte[i] = 0xFF;
+  }
+  //------------------------------------------------------------------------------
+  /* Tìm kiếm thẻ mới */
+  /* Đặt lại vòng lặp nếu không có thẻ mới xuất hiện trên đầu đọc RC522 */
+  if (!mfrc522.PICC_IsNewCardPresent()){return;}
+  //------------------------------------------------------------------------------
+  /* Chọn một trong những thẻ */
+  if (!mfrc522.PICC_ReadCardSerial()) {return;}
+  //------------------------------------------------------------------------------
+  printf("\n**Thẻ được phát hiện**\n");
+  /* In UID của thẻ */
+  printf("UID thẻ:");
+  for (byte i = 0; i < mfrc522.uid.size; i++){
+    printf(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
+    printf("%x", mfrc522.uid.uidByte[i]);
+  }
+  printf("\n");
+  /* In loại thẻ (ví dụ, MIFARE 1K) */
+  printf("Loại thẻ: ");
+  MFRC522::PICC_Type piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+  printf("%s\n", mfrc522.PICC_GetTypeName(piccType));
+  //------------------------------------------------------------------------------
+  /* Gọi hàm 'WriteDataToBlock', nó sẽ ghi dữ liệu vào block */
+  printf("\nĐang ghi vào Block dữ liệu...\n");
+  WriteDataToBlock(blockNum, blockData);
+  //------------------------------------------------------------------------------
+  /* Đọc dữ liệu từ cùng một block */
+  printf("\nĐang đọc từ Block dữ liệu...\n");
+  ReadDataFromBlock(blockNum, readBlockData);
+  /* Nếu bạn muốn in toàn bộ bộ nhớ, hãy bỏ chú thích dòng tiếp theo */
+  //mfrc522.PICC_DumpToSerial(&(mfrc522.uid));
+  //------------------------------------------------------------------------------
+  /* In dữ liệu đọc từ block */
+  printf("\nDữ liệu trong Block:%d --> ", blockNum);
+  for (int j = 0; j < 16; j++){
+    printf("%c", readBlockData[j]);
+  }
+  printf("\n");
+  //------------------------------------------------------------------------------
+}
+
+/****************************************************************************************************
+ * Hàm WriteDataToBlock()
+ ****************************************************************************************************/
+void WriteDataToBlock(int blockNum, byte blockData[]) 
+{
+  //------------------------------------------------------------------------------
+  /* Xác thực block dữ liệu mong muốn để truy cập ghi bằng Key A */
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockNum, &key, &(mfrc522.uid));
+  if (status != MFRC522::STATUS_OK){
+    printf("Xác thực thất bại khi Ghi: %s\n", mfrc522.GetStatusCodeName(status));
+    return;
+  }
+  //------------------------------------------------------------------------------
+  else {
+    printf("Xác thực thành công\n");
+  }
+  //------------------------------------------------------------------------------
+  /* Ghi dữ liệu vào block */
+  status = mfrc522.MIFARE_Write(blockNum, blockData, 16);
+  if (status != MFRC522::STATUS_OK) {
+    printf("Ghi vào Block thất bại: %s\n", mfrc522.GetStatusCodeName(status));
+    return;
+  }
+  else
+  {printf("Dữ liệu đã được ghi vào Block thành công\n");}
+  //------------------------------------------------------------------------------
+}
+
+/****************************************************************************************************
+ * Hàm ReadDataFromBlock()
+ ****************************************************************************************************/
+void ReadDataFromBlock(int blockNum, byte readBlockData[]) 
+{
+  //------------------------------------------------------------------------------
+  /* Xác thực block dữ liệu mong muốn để truy cập đọc bằng Key A */
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockNum, &key, &(mfrc522.uid));
+  //------------------------------------------------------------------------------
+  if (status != MFRC522::STATUS_OK){
+    printf("Xác thực thất bại khi Đọc: %s\n", mfrc522.GetStatusCodeName(status));
+    return;
+  }
+  else {
+    printf("Xác thực thành công\n");
+  }
+  //------------------------------------------------------------------------------
+  /* Đọc dữ liệu từ Block */
+  status = mfrc522.MIFARE_Read(blockNum, readBlockData, &bufferLen);
+  if (status != MFRC522::STATUS_OK){
+    printf("Đọc thất bại: %s\n", mfrc522.GetStatusCodeName(status));
+    return;
+  }
+  else {
+    printf("Block đã được đọc thành công\n");  
+  }
+  //------------------------------------------------------------------------------
+}
